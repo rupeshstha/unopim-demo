@@ -1,0 +1,127 @@
+# For more information: https://laravel.com/docs/sail
+version: '3'
+services:
+    unopim1:
+        build:
+            context: .
+            dockerfile: ./local-docker/8.1/Dockerfile
+            args:
+                WWWGROUP: '${WWWGROUP}'
+        image: sail-8.1/app
+        user: root:root
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+        ports:
+            - '${APP_PORT}:80'
+            - 8000:8000
+            # - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
+            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
+        volumes:
+            - '.:/var/www/html'
+            # - 'sail-mysql:/var/www/html/storage/app/public'
+        networks:
+            - sail
+        depends_on:
+            - unopim1.mysql
+            - unopim1.redis
+    unopim1.mysql:
+        image: 'mysql/mysql-server:8.0'
+        ports:
+            - '${FORWARD_DB_PORT:-3306}:3306'
+        environment:
+            MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
+            MYSQL_ROOT_HOST: "%"
+            MYSQL_DATABASE: '${DB_DATABASE}'
+            MYSQL_USER: '${DB_USERNAME}'
+            MYSQL_PASSWORD: '${DB_PASSWORD}'
+            MYSQL_ALLOW_EMPTY_PASSWORD: 2
+        volumes:
+            - 'unopim1-mysql:/var/lib/mysql'
+            - './vendor/laravel/sail/database/mysql/create-testing-database.sh:/docker-entrypoint-initdb.d/10-create-testing-database.sh'
+        networks:
+            - sail
+        healthcheck:
+            test: ["CMD", "mysqladmin", "ping", "-p${DB_PASSWORD}"]
+            retries: 3
+            timeout: 5s
+    # unopim1.keycloak:
+    #     image: 'quay.io/phasetwo/phasetwo-keycloak:latest'
+    #     ports:
+    #         - '8083:8080'
+    #     expose:
+    #         - '8080'
+    #     networks:
+    #         - sail
+    #     volumes:
+    #         - 'unopim1-keycloak:/opt/keycloak/data'
+    #     depends_on:
+    #         - unopim1.mysql
+    #     command:
+    #         - start-dev
+    #     environment:
+    #         KEYCLOAK_ADMIN: admin
+    #         KEYCLOAK_ADMIN_PASSWORD: admin
+    #         KEYCLOAK_USER: admin
+    #         KEYCLOAK_PASSWORD: admin
+    unopim1.redis:
+        image: 'redis:alpine'
+        ports:
+            - '${FORWARD_REDIS_PORT:-6379}:6379'
+        volumes:
+            - 'unopim1-redis:/data'
+        networks:
+            - sail
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            retries: 3
+            timeout: 5s
+    # unopim1.elasticsearch:
+    #     image: 'elasticsearch:7.17.9'
+    #     environment:
+    #         - discovery.type=single-node
+    #         - "ES_JAVA_OPTS=-Xms1024m -Xmx1024m"
+    #     ports:
+    #         - '9200:9200'
+    #         - '9300:9300'
+    #     volumes:
+    #         - 'unopim1-elasticsearch:/usr/share/elasticsearch/data'
+    #     networks:
+    #         - sail
+    unopim1.mailhog:
+        image: 'mailhog/mailhog:latest'
+        ports:
+            - 1025:1025
+            - 8025:8025
+        networks:
+            - sail
+    unopim1.phpmyadmin:
+        image: 'phpmyadmin:latest'
+        ports:
+          - 8081:80
+        environment:
+          MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
+          UPLOAD_LIMIT: 500M
+        links:
+          - "unopim1.mysql:db"
+        depends_on:
+          - unopim1.mysql
+        networks:
+          - sail
+networks:
+    sail:
+        driver: bridge
+volumes:
+    unopim1-storage:
+        driver: local
+    unopim1-mysql:
+        driver: local
+    unopim1-redis:
+        driver: local
+    # unopim1-elasticsearch:
+    #     driver: local
+    # unopim1-keycloak:
+        # driver: local
